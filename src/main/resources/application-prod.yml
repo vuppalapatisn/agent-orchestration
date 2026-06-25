@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/agentdb}
+    driver-class-name: org.postgresql.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:agent}
+    password: ${SPRING_DATASOURCE_PASSWORD:agentpass}
+  jpa:
+    hibernate:
+      ddl-auto: update
+  ai:
+    mcp:
+      client:
+        enabled: ${MCP_ENABLED:true}

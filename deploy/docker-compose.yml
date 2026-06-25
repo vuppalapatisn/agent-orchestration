@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  app:
+    build: ..
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/agentdb
+      SPRING_DATASOURCE_USERNAME: agent
+      SPRING_DATASOURCE_PASSWORD: agentpass
+      APP_SECURITY_USER: agentadmin
+      APP_SECURITY_PASSWORD: changeit-changeit
+      AZURE_OPENAI_ENDPOINT: https://your-resource.openai.azure.com/
+      AZURE_OPENAI_API_KEY: replace-me
+      AZURE_OPENAI_DEPLOYMENT: gpt-4o-mini
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+    depends_on:
+      - postgres
+      - otel-collector
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: agentdb
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agentpass
+    ports:
+      - "5432:5432"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.104.0
+    command: ["--config=/etc/otel-collector-config.yml"]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  zipkin:
+    image: openzipkin/zipkin:3.4.1
+    ports:
+      - "9411:9411"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin

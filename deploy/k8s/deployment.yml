@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-orchestration
+  namespace: agent-orchestration
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: agent-orchestration
+  template:
+    metadata:
+      labels:
+        app: agent-orchestration
+    spec:
+      containers:
+        - name: app
+          image: agent-orchestration-production:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: agent-orchestration-config
+            - secretRef:
+                name: agent-orchestration-secret
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
