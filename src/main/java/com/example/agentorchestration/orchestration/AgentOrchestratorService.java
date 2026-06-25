@@ -130,23 +130,18 @@ package com.example.agentorchestration.orchestration;
             ApprovalRecord record = approvalService.decide(id, decisionRequest.approve(), decisionRequest.approver(), decisionRequest.comments());
 
             if (record.status() == ApprovalStatus.REJECTED) {
-                String rejection = reviewerAgent.review(record.draft() + "
-
-Approval decision: REJECTED by "
+                String rejection = reviewerAgent.review(record.draft()
+                        + "\n\nApproval decision: REJECTED by "
                         + decisionRequest.approver() + ". Comments: " + decisionRequest.comments());
                 return new AgentResponse(AgentStatus.REJECTED, record.route(), record.plannerReason(), record.evidence(), rejection,
                         record.id(), record.action() + " on " + record.target());
             }
 
             String actionResult = executeApprovedAction(record);
-            String completedDraft = record.draft() + "
-
-Approved action result:
-" + actionResult
-                    + "
-Approved by: " + decisionRequest.approver()
-                    + "
-Comments: " + (decisionRequest.comments() == null ? "N/A" : decisionRequest.comments());
+            String completedDraft = record.draft()
+                    + "\n\nApproved action result:\n" + actionResult
+                    + "\nApproved by: " + decisionRequest.approver()
+                    + "\nComments: " + (decisionRequest.comments() == null ? "N/A" : decisionRequest.comments());
 
             return new AgentResponse(AgentStatus.COMPLETED,
                     record.route(),
@@ -166,22 +161,13 @@ Comments: " + (decisionRequest.comments() == null ? "N/A" : decisionRequest.comm
 
         private String composeDraft(RoutePlan plan, List<WorkerResult> workerResults) {
             String evidence = workerResults.stream()
-                    .map(w -> "## " + w.workerName() + "
-" + w.summary())
-                    .collect(Collectors.joining("
-
-"));
-            return "Route: " + plan.route() + "
-"
-                    + "Planner reason: " + plan.reason() + "
-"
-                    + "Confidence: " + plan.confidence() + "
-"
-                    + "Approval required: " + plan.approvalRequired() + "
-"
-                    + "Approval action: " + plan.approvalAction() + "
-
-"
+                    .map(w -> "## " + w.workerName() + "\n" + w.summary())
+                    .collect(Collectors.joining("\n\n"));
+            return "Route: " + plan.route() + "\n"
+                    + "Planner reason: " + plan.reason() + "\n"
+                    + "Confidence: " + plan.confidence() + "\n"
+                    + "Approval required: " + plan.approvalRequired() + "\n"
+                    + "Approval action: " + plan.approvalAction() + "\n\n"
                     + evidence;
         }
     }
