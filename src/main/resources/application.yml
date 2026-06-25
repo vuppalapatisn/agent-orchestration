@@ -91,6 +91,13 @@ logging:
     org.springframework.security: INFO
     com.example.agentorchestration: DEBUG
 
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+  api-docs:
+    path: /v3/api-docs
+
 info:
   app:
     name: ${spring.application.name}
