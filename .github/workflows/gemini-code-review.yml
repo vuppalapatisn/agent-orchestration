@@ -1,0 +1,102 @@
+name: gemini-code-review
+
+# Reviews every code change on a pull request with Google Gemini and posts the
+# findings back as an inline PR review.
+#
+# Triggers:
+#   - pull_request:      opened / new commits pushed / reopened / marked ready
+#   - issue_comment:     someone comments "/gemini-review" on the PR
+#   - workflow_dispatch: manual run against a PR number
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to review
+        required: true
+        type: string
+      model:
+        description: Gemini model to use
+        required: false
+        default: gemini-2.5-pro
+        type: string
+
+# One review per PR: a new push cancels the review still running for the old commit.
+concurrency:
+  group: gemini-review-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    # Run for: non-draft same-repo PRs, an explicit /gemini-review comment on a
+    # PR, or a manual dispatch. Fork PRs are excluded on the pull_request path
+    # because they get a read-only token and no access to secrets — a maintainer
+    # comments /gemini-review to review those.
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.draft == false &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       contains(github.event.comment.body, '/gemini-review')) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Resolve PR number
+        id: pr
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_FROM_PULL: ${{ github.event.pull_request.number }}
+          PR_FROM_COMMENT: ${{ github.event.issue.number }}
+          PR_FROM_INPUT: ${{ inputs.pr_number }}
+        run: |
+          case "$EVENT_NAME" in
+            pull_request)      echo "number=$PR_FROM_PULL"    >> "$GITHUB_OUTPUT" ;;
+            issue_comment)     echo "number=$PR_FROM_COMMENT" >> "$GITHUB_OUTPUT" ;;
+            workflow_dispatch) echo "number=$PR_FROM_INPUT"   >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      # Deliberately checks out the BASE branch, not the PR head: the agent only
+      # needs its own script and the review guidelines, and taking those from an
+      # untrusted PR branch would let a contributor rewrite the reviewer's prompt.
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Acknowledge slash command
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" -f content=eyes --silent
+
+      - name: Run Gemini review agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          GEMINI_MODEL: ${{ inputs.model || vars.GEMINI_MODEL || 'gemini-2.5-pro' }}
+          MAX_DIFF_CHARS: ${{ vars.GEMINI_MAX_DIFF_CHARS || '180000' }}
+          MAX_FINDINGS: ${{ vars.GEMINI_MAX_FINDINGS || '20' }}
+          MAX_FILES: ${{ vars.GEMINI_MAX_FILES || '60' }}
+          GUIDELINES_FILE: .github/gemini-review-guidelines.md
+          # Set repository variable GEMINI_FAIL_ON_SEVERITY to "blocker" or
+          # "major" to turn this advisory agent into a merge-blocking check.
+          FAIL_ON_SEVERITY: ${{ vars.GEMINI_FAIL_ON_SEVERITY || 'none' }}
+        run: node .github/scripts/gemini-code-review.mjs
